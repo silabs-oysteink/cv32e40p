@@ -212,6 +212,7 @@ module cv32e40p_controller import cv32e40p_pkg::*;
   logic is_hwlp_illegal, is_hwlp_body;
   logic illegal_insn_q, illegal_insn_n;
   logic debug_req_entry_q, debug_req_entry_n;
+  logic debug_force_wakeup_q, debug_force_wakeup_n;
 
   logic hwlp_end0_eq_pc;
   logic hwlp_end1_eq_pc;
@@ -368,7 +369,7 @@ module cv32e40p_controller import cv32e40p_pkg::*;
       FIRST_FETCH:
       begin
         is_decoding_o = 1'b0;
-
+        debug_force_wakeup_n = 1'b1;
         // Stall because of IF miss
         if (id_ready_i == 1'b1) begin
           ctrl_fsm_ns = DECODE;
@@ -468,6 +469,7 @@ module cv32e40p_controller import cv32e40p_pkg::*;
 
             is_decoding_o = 1'b1;
             illegal_insn_n = 1'b0;
+            debug_force_wakeup_n = ( (debug_req_pending || trigger_match_i) & ~debug_mode_q ) & debug_force_wakeup_q;
 
             if ( (debug_req_pending || trigger_match_i) & ~debug_mode_q )
               begin
@@ -1144,7 +1146,9 @@ module cv32e40p_controller import cv32e40p_pkg::*;
             csr_save_cause_o = 1'b1;
             csr_save_id_o    = 1'b1;
             debug_csr_save_o = 1'b1;
-            if (trigger_match_i)
+            if (debug_force_wakeup_q)
+                debug_cause_o = DBG_CAUSE_HALTREQ;
+            else if (trigger_match_i)
                 debug_cause_o = DBG_CAUSE_TRIGGER; // pri 4 (highest)
             else if (ebrk_force_debug_mode & ebrk_insn_i)
                 debug_cause_o = DBG_CAUSE_EBREAK; // pri 3
@@ -1153,6 +1157,7 @@ module cv32e40p_controller import cv32e40p_pkg::*;
 
         end
         debug_req_entry_n  = 1'b0;
+        debug_force_wakeup_n = 1'b0;
         ctrl_fsm_ns        = DECODE;
         debug_mode_n       = 1'b1;
       end
@@ -1386,6 +1391,8 @@ endgenerate
       illegal_insn_q     <= 1'b0;
 
       debug_req_entry_q  <= 1'b0;
+
+      debug_force_wakeup_q <= 1'b0;
     end
     else
     begin
@@ -1401,6 +1408,8 @@ endgenerate
       illegal_insn_q     <= illegal_insn_n;
 
       debug_req_entry_q  <= debug_req_entry_n;
+
+      debug_force_wakeup_q <= debug_force_wakeup_n;
     end
   end
 
